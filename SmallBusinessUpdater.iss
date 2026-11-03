@@ -1,4 +1,4 @@
-#define AppVersion "0.8.5.0"
+#define AppVersion GetFileVersion("artifacts\publish\SmallBusinessUpdater.exe")
 
 [Setup]
 AppId={{B6B7812C-7F34-4DAE-A513-27F79B53F814}
@@ -24,3 +24,4 @@ Source: "artifacts\publish\SmallBusinessUpdater.exe"; DestDir: "{app}"; Flags: i
 [Icons]
 Name: "{group}\Small Business Updater"; Filename: "{app}\SmallBusinessUpdater.exe"
 Name: "{autodesktop}\Small Business Updater"; Filename: "{app}\SmallBusinessUpdater.exe"; Tasks: desktopicon
+
