@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="SmallBusinessUpdater.StartupCheckWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Small Business Updater" Width="460" Height="205" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True" Background="#F6F7F9" xmlns:smallbusinessupdater="clr-namespace:SmallBusinessUpdater;assembly=SmallBusinessUpdater">
+  <Grid Margin="16">
+    <Border Background="#FFFFFFFF" CornerRadius="8" Padding="20">
+      <StackPanel VerticalAlignment="Center">
+        <TextBlock Text="Sprawdzam aktualizacje Small Business..." FontSize="16" FontWeight="SemiBold" Foreground="#111827" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380" />
+        <TextBlock Text="Proszę chwilę poczekać." FontSize="13" Foreground="#6B7280" HorizontalAlignment="Center" Margin="0,10,0,18" />
+        <ProgressBar Height="8" IsIndeterminate="True" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>
