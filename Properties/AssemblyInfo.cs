@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
@@ -9,10 +9,10 @@ using System.Windows.Resources;
 [assembly: AssemblyAssociatedContentFile("smallbusinessupdater.ico")]
 [assembly: AssemblyCompany("SmallBusinessUpdater")]
 [assembly: AssemblyConfiguration("Release")]
-[assembly: AssemblyFileVersion("0.8.4.0")]
-[assembly: AssemblyInformationalVersion("0.8.4")]
+[assembly: AssemblyFileVersion("0.8.5.0")]
+[assembly: AssemblyInformationalVersion("0.8.5")]
 [assembly: AssemblyProduct("SmallBusinessUpdater")]
 [assembly: AssemblyTitle("SmallBusinessUpdater")]
 [assembly: TargetPlatform("Windows10.0.19041.0")]
 [assembly: SupportedOSPlatform("Windows10.0.19041.0")]
-[assembly: AssemblyVersion("0.8.4.0")]
+[assembly: AssemblyVersion("0.8.5.0")]
