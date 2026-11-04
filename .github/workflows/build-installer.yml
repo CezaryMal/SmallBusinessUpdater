@@ -1,6 +1,8 @@
 name: Build Windows installer
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -30,3 +32,54 @@ jobs:
           path: artifacts/installer/*.exe
           archive: false
           if-no-files-found: error
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v8
+        with:
+          path: release-files
+          merge-multiple: true
+      - name: Publish GitHub Release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content SmallBusinessUpdater.csproj -Raw
+          $version = [string]($project.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+          if ($version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw 'Version must have four numeric components.' }
+          $tag = "v$version"
+          $asset = Get-Item -LiteralPath "release-files/SmallBusinessUpdater_Setup_v$version.exe"
+          $releases = gh release list --limit 1000 --json tagName,isDraft | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not list releases.' }
+          $existing = $releases | Where-Object tagName -eq $tag
+          if ($existing -and !$existing.isDraft) {
+            Write-Host "Release $tag already exists. Increase Version for a new release."
+            exit 0
+          }
+          $remoteTag = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check tag.' }
+          if ($remoteTag) {
+            git fetch origin "refs/tags/$tag"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not fetch tag.' }
+            $tagCommit = git rev-parse 'FETCH_HEAD^{commit}'
+            if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $env:BUILD_SHA) { throw 'Tag belongs to another commit. Increase Version.' }
+          }
+          if (!$existing) {
+            gh release create $tag --target $env:BUILD_SHA --title "Small Business Updater $version" --generate-notes --draft
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release.' }
+          }
+          gh release upload $tag $asset.FullName --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload installer. Release remains a draft.' }
+          gh release edit $tag --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release.' }
