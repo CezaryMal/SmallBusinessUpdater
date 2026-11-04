@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 
 namespace SmallBusinessUpdater.Services;
@@ -14,8 +14,8 @@ public static class AppVersionService
 			{
 				return "0.0.0";
 			}
-			return $"{version.Major}.{version.Minor}.{version.Build}";
-		}
+            return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+        }
 	}
 
 	public static string DisplayVersion => "v" + Version;
