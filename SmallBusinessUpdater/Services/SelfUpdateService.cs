@@ -32,6 +32,7 @@ internal static class SelfUpdateService
             string cache = Path.Combine(AppPaths.LocalDataDirectory, "SelfUpdate");
             Directory.CreateDirectory(cache);
             using var updateLock = new FileStream(Path.Combine(cache, "update.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            SelfUpdateArchiveService.Clean(cache);
             using var request = new HttpRequestMessage(HttpMethod.Get,
                 "https://api.github.com/repos/CezaryMal/SmallBusinessUpdater/releases/latest");
             request.Headers.UserAgent.ParseAdd("SmallBusinessUpdater/1.0");
@@ -65,6 +66,7 @@ internal static class SelfUpdateService
                 string installer = Path.Combine(cache, name);
                 await File.WriteAllBytesAsync(installer + ".part", bytes);
                 File.Move(installer + ".part", installer, true);
+                SelfUpdateArchiveService.Clean(cache, installer);
                 string script = "$ErrorActionPreference='Stop'; " +
                     $"Wait-Process -Id {Environment.ProcessId} -Timeout 120 -ErrorAction SilentlyContinue; " +
                     $"if (Get-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue) {{ exit 1 }}; " +
@@ -90,4 +92,5 @@ internal static class SelfUpdateService
         finally { checking = false; }
     }
 }
+
 
