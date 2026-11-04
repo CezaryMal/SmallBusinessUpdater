@@ -26,10 +26,10 @@ Automatyczna obsługa instalatora Small Business korzysta z okien i skrótów kl
 
 Przy niepełnej konfiguracji tryby automatyczne otwierają ustawienia. Po wygaśnięciu okresu aktualizacji wyświetlane jest odpowiednie okno.
 
-Przykład uruchomienia w PowerShellu przy domyślnym katalogu instalacji
+Przykład uruchomienia w PowerShellu przy domyślnym katalogu instalacji dla bieżącego użytkownika
 
 ```powershell
-& 'C:\Program Files\Small Business Updater\SmallBusinessUpdater.exe' --check
+& "$env:LOCALAPPDATA\Programs\Small Business Updater\SmallBusinessUpdater.exe" --check
 ```
 
 Opcja autostartu zapisuje wpis SmallBusinessUpdater w kluczu bieżącego użytkownika HKCU\Software\Microsoft\Windows\CurrentVersion\Run. Wpis uruchamia zainstalowany plik z argumentem --startup po zalogowaniu do Windows.
@@ -40,8 +40,9 @@ Opcja autostartu zapisuje wpis SmallBusinessUpdater w kluczu bieżącego użytko
 |---|---|
 | %APPDATA%\SmallBusinessUpdater\config.json | Ustawienia licencji, ścieżka programu i opcje aplikacji. |
 | %APPDATA%\SmallBusinessUpdater\state.json | Stan ostatniej pomyślnie zainstalowanej aktualizacji Small Business. |
-| %LOCALAPPDATA%\SmallBusinessUpdater\Downloads | Pobrane instalatory. |
-| %LOCALAPPDATA%\SmallBusinessUpdater\Logs | Logi, w tym startup.log i check.log. |
+| %LOCALAPPDATA%\SmallBusinessUpdater\Downloads | Instalatory Small Business. |
+| %LOCALAPPDATA%\SmallBusinessUpdater\SelfUpdate | Instalatory Updatera, update.lock i install-result.log. |
+| %LOCALAPPDATA%\SmallBusinessUpdater\Logs | Logi, w tym startup.log, check.log, self-update.log i cleanup.log. |
 
 Logi są rotowane po osiągnięciu około 2 MiB. Dla każdego pliku przechowywane są maksymalnie trzy archiwalne kopie.
 
@@ -72,12 +73,12 @@ Po publikacji skrypt SmallBusinessUpdater.iss można skompilować za pomocą ISC
 Numer wersji zmienia się w jednym miejscu w SmallBusinessUpdater.csproj, np.
 
 ```xml
-<Version>0.8.6.3</Version>
+<Version>0.8.7.2</Version>
 ```
 
 Kompilacja generuje z tej wartości metadane aplikacji. Inno Setup odczytuje numer z opublikowanego EXE i używa go w nazwie instalatora oraz wpisie zainstalowanej aplikacji.
 
-Okno Updatera wyświetla trzy pierwsze człony numeru. Dla 0.8.6.3 interfejs pokazuje v0.8.6.
+Okno Updatera wyświetla pełny czteroczłonowy numer, np. v0.8.7.2.
 
 AppId w skrypcie Inno Setup identyfikuje istniejącą instalację. Zachowuj tę wartość przy kolejnych wydaniach, aby instalator aktualizował poprzednią kopię.
 
@@ -92,9 +93,43 @@ Workflow znajduje się w .github/workflows/build-installer.yml.
 
 Workflow działa na Windowsie, instaluje SDK .NET 10, publikuje samodzielną aplikację, kompiluje skrypt Inno Setup i udostępnia instalator bez dodatkowego archiwum ZIP.
 
-Gałąź Development służy do przygotowywania i testowania zmian. Zmiany gotowe do wydania są scalane do main. Workflow jest uruchamiany ręcznie.
+Gałąź Development służy do przygotowywania i testowania zmian. Ręczne uruchomienie workflow buduje instalator i udostępnia go w Artifacts.
 
-Gotowy instalator można ręcznie dołączyć do GitHub Releases z tagiem odpowiadającym wersji, np. v0.8.6.3, wskazującym na commit użyty do buildu.
+### Automatyczne wydania
+
+Push do main, również powstały po scaleniu pull requesta, uruchamia build. Po udanej kompilacji osobny job publikuje GitHub Release z tagiem v<Version> i instalatorem EXE z tego samego uruchomienia.
+
+1. Na Development zmień Version w pliku .csproj na nowy, czteroczłonowy numer.
+2. Wykonaj ręczny build na Development i przetestuj instalator.
+3. Scal sprawdzone zmiany do main.
+4. Sprawdź wynik jobów build i release oraz załącznik w GitHub Releases.
+
+Wydanie jest najpierw tworzone jako szkic. Po przesłaniu instalatora workflow publikuje je z automatycznie wygenerowanym opisem zmian. Tag wskazuje commit użyty do buildu. Token GITHUB_TOKEN dostaje uprawnienie contents: write wyłącznie w jobie publikującym.
+
+Jeśli opublikowane wydanie o tym numerze już istnieje, publikacja jest pomijana. Każde kolejne wydanie wymaga zwiększenia Version. Przy błędzie przesyłania instalatora szkic pozostaje do ponowienia. Workflow sprawdza zgodność istniejącego tagu z commitem przed wznowieniem publikacji szkicu.
+
+Po opublikowaniu Release instalator staje się dostępny dla mechanizmu samoczynnej aktualizacji działających Updaterów. Przed scaleniem do main przetestuj wersję na Development.
+
+## Samoczynna aktualizacja Updatera
+
+Aplikacja instaluje się dla bieżącego użytkownika w %LOCALAPPDATA%\Programs\Small Business Updater. Instalator ma PrivilegesRequired=lowest. Samodzielny EXE zawiera środowisko .NET.
+
+Po zakończeniu obsługi aktualizacji Small Business, w tym jego uruchomienia zgodnie z zapisaną opcją, aplikacja sprawdza najnowsze stabilne wydanie w publicznym repozytorium CezaryMal/SmallBusinessUpdater. Sprawdzanie może też nastąpić po błędzie operacji Small Business. Wcześniejsze wyjście z powodu nieprawidłowej konfiguracji lub daty końca dostępu pomija tę ścieżkę.
+
+Release musi mieć tag vX.Y.Z.W oraz załącznik SmallBusinessUpdater_Setup_vX.Y.Z.W.exe. Mechanizm porównuje wszystkie cztery człony wersji i weryfikuje rozmiar oraz SHA256 pobranego pliku względem metadanych GitHuba.
+
+Po pobraniu nowszej wersji Updater zamyka się, a proces pomocniczy czeka na jego zakończenie i uruchamia instalator w trybie cichym. Program można otworzyć ponownie po instalacji. Wynik instalatora trafia do SelfUpdate\install-result.log, a szczegóły sprawdzania do Logs\self-update.log. Nieudana próba może zostać ponowiona przy kolejnym sprawdzaniu.
+
+Przejście ze starej instalacji w Program Files wymaga jednorazowego odinstalowania starej kopii i zainstalowania wersji dla bieżącego użytkownika. Przed migracją wykonaj kopię %APPDATA%\SmallBusinessUpdater. Po migracji sprawdź i zapisz ustawienia autostartu.
+
+## Przechowywanie instalatorów
+
+Small Business i Updater mają osobne archiwa.
+
+- Downloads zachowuje po jednym instalatorze trzech najwyższych rozpoznanych buildów Small Business. Sprzątanie następuje po pobraniu i weryfikacji instalatora.
+- SelfUpdate zachowuje trzy najwyższe czteroczłonowe wersje instalatora Updatera. Sprzątanie następuje przed żądaniem do GitHuba i po pobraniu nowej wersji, więc działa również przed nieudaną próbą połączenia.
+- Plik chroniony podczas operacji lub zablokowany przed usunięciem może chwilowo zwiększyć liczbę kopii. Kolejne sprawdzanie ponawia sprzątanie.
+- Sprzątanie obejmuje rozpoznane nazwy instalatorów. Pliki logów, blokady i pliki .part pozostają w katalogu.
 
 ## Kontrola przed wydaniem
 
@@ -114,4 +149,5 @@ Lokalne katalogi .vs, bin i obj są wykluczane przez .gitignore. Przed commitem 
 ## Podpis instalatora
 
 Instalator Updatera jest obecnie dystrybuowany bez podpisu cyfrowego. Windows może wyświetlić komunikat SmartScreen o nierozpoznanej aplikacji i nieznanym wydawcy.
+
 
