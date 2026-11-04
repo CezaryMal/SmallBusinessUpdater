@@ -109,6 +109,7 @@ public static class UpdateService
 						Message = "Nie udało się rozpoznać numeru buildu instalatora."
 					};
 				}
+				InstallerArchiveService.Clean(destination);
 				UpdateState updateState = VersionStateService.Load();
 				bool flag = updateState.InstalledBuild != buildNumber;
 				string message = ((!flag) ? $"Build {buildNumber} jest już zainstalowany." : $"Dostępna aktualizacja: build {buildNumber}.");
@@ -184,3 +185,4 @@ public static class UpdateService
 		}
 	}
 }
+

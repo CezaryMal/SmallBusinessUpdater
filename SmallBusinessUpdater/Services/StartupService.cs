@@ -98,6 +98,10 @@ public static class StartupService
 				}
 				return StartupRunResult.Completed;
 			}
+			finally
+			{
+				await SelfUpdateService.CheckAsync();
+			}
 		}
 		void FinishChecking()
 		{
@@ -163,3 +167,4 @@ public static class StartupService
 		LogService.Write("startup.log", message);
 	}
 }
+
