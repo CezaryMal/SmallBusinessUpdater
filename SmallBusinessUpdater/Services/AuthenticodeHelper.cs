@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 
@@ -20,7 +20,7 @@ internal static class AuthenticodeHelper
 	}
 
 	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-	private struct WINTRUST_DATA(WINTRUST_FILE_INFO fileInfo)
+	private struct WINTRUST_DATA()
 	{
 		public uint cbStruct = (uint)Marshal.SizeOf<WINTRUST_DATA>();
 
@@ -61,7 +61,7 @@ internal static class AuthenticodeHelper
 	public static bool IsSignatureValid(string filePath)
 	{
 		WINTRUST_FILE_INFO wINTRUST_FILE_INFO = new WINTRUST_FILE_INFO(filePath);
-		WINTRUST_DATA pWVTData = new WINTRUST_DATA(wINTRUST_FILE_INFO);
+		WINTRUST_DATA pWVTData = new WINTRUST_DATA();
 		nint num = IntPtr.Zero;
 		try
 		{
