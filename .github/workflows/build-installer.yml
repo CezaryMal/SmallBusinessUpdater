@@ -25,7 +25,7 @@ jobs:
           }
           & $iscc SmallBusinessUpdater.iss
           exit $LASTEXITCODE
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: SmallBusinessUpdater-installer
           path: artifacts/installer/*.exe
