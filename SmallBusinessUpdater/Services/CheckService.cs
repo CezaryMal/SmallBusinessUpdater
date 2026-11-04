@@ -40,6 +40,7 @@ public static class CheckService
 			if (!result.UpdateAvailable)
 			{
 				Log($"Brak nowej aktualizacji. Build {result.BuildNumber} jest już zainstalowany.");
+				if (config.LaunchAfterUpdate) SmallBusinessService.Start(config.SmallBusinessPath);
 				return CheckRunResult.Completed;
 			}
 			if (string.IsNullOrWhiteSpace(result.InstallerPath))
@@ -62,6 +63,10 @@ public static class CheckService
 		{
 			Log($"Nieobsłużony błąd --check: {value}");
 			return CheckRunResult.Failed;
+		}
+		finally
+		{
+			await SelfUpdateService.CheckAsync();
 		}
 	}
 
@@ -100,3 +105,4 @@ public static class CheckService
 		LogService.Write("check.log", message);
 	}
 }
+

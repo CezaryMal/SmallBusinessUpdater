@@ -138,6 +138,7 @@ public partial class MainWindow : Window, IComponentConnector
 			if (!result.UpdateAvailable)
 			{
 				SetStatus($"Brak nowej aktualizacji. Build {result.BuildNumber} jest już zainstalowany.");
+				if (_config.LaunchAfterUpdate) SmallBusinessService.Start(_config.SmallBusinessPath);
 				return;
 			}
 			if (string.IsNullOrWhiteSpace(result.InstallerPath))
@@ -164,6 +165,7 @@ public partial class MainWindow : Window, IComponentConnector
 		finally
 		{
 			SetBusy(busy: false);
+			await SelfUpdateService.CheckAsync();
 		}
 	}
 
@@ -186,3 +188,4 @@ public partial class MainWindow : Window, IComponentConnector
 		LaunchAfterUpdateCheckBox.IsEnabled = !busy;
 	}
 }
+

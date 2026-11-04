@@ -5,10 +5,11 @@ AppId={{B6B7812C-7F34-4DAE-A513-27F79B53F814}
 AppName=Small Business Updater
 AppVersion={#AppVersion}
 AppPublisher=Small Business Updater
-DefaultDirName={autopf}\Small Business Updater
+DefaultDirName={localappdata}\Programs\Small Business Updater
+UsePreviousAppDir=no
 DefaultGroupName=Small Business Updater
 UninstallDisplayIcon={app}\SmallBusinessUpdater.exe
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=artifacts\installer
@@ -25,3 +26,12 @@ Source: "artifacts\publish\SmallBusinessUpdater.exe"; DestDir: "{app}"; Flags: i
 Name: "{group}\Small Business Updater"; Filename: "{app}\SmallBusinessUpdater.exe"
 Name: "{autodesktop}\Small Business Updater"; Filename: "{app}\SmallBusinessUpdater.exe"; Tasks: desktopicon
 
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SmallBusinessUpdater"; ValueData: """{app}\SmallBusinessUpdater.exe"" --startup"; Check: HasAutoStart; Flags: uninsdeletevalue
+
+[Code]
+function HasAutoStart: Boolean;
+begin
+  Result := RegValueExists(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'SmallBusinessUpdater');
+end;
