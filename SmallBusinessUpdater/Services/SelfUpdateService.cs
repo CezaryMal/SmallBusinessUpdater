@@ -20,8 +20,28 @@ internal static class SelfUpdateService
     private static bool checking;
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromMinutes(3) };
 
+    internal static string BuildInstallScript(string installer, string application, string logPath,
+        int parentProcessId, bool reopenAfterUpdate)
+    {
+        string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+        string reopen = reopenAfterUpdate
+            ? "if ($installExitCode -eq 0) { Start-Process -FilePath " + Quote(application) +
+              " -WorkingDirectory " + Quote(Path.GetDirectoryName(application)!) + " | Out-Null }; "
+            : "";
+
+        return "$ErrorActionPreference='Stop'; " +
+            $"Wait-Process -Id {parentProcessId} -Timeout 120 -ErrorAction SilentlyContinue; " +
+            $"if (Get-Process -Id {parentProcessId} -ErrorAction SilentlyContinue) {{ exit 1 }}; " +
+            "$p=Start-Process -FilePath " + Quote(installer) +
+            " -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /LOG' -Wait -PassThru; " +
+            "$installExitCode=$p.ExitCode; " +
+            "Add-Content -LiteralPath " + Quote(logPath) +
+            " -Value ((Get-Date).ToString('o') + ' exit=' + $installExitCode); " +
+            reopen + "exit $installExitCode";
+    }
+
     public static async Task<SelfUpdateResult> CheckAsync(IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool reopenAfterUpdate = false)
     {
         if (checking) return new(false, "Sprawdzanie aktualizacji Updatera już trwa.");
         checking = true;
@@ -91,13 +111,9 @@ internal static class SelfUpdateService
                 cancellationToken.ThrowIfCancellationRequested();
                 File.Move(partialPath, installer, true);
                 SelfUpdateArchiveService.Clean(cache, installer);
-                string script = "$ErrorActionPreference='Stop'; " +
-                    $"Wait-Process -Id {Environment.ProcessId} -Timeout 120 -ErrorAction SilentlyContinue; " +
-                    $"if (Get-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue) {{ exit 1 }}; " +
-                    "$p=Start-Process -FilePath '" + installer.Replace("'", "''") +
-                    "' -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /LOG' -Wait -PassThru; " +
-                    "Add-Content -LiteralPath '" + Path.Combine(cache, "install-result.log").Replace("'", "''") +
-                    "' -Value ((Get-Date).ToString('o') + ' exit=' + $p.ExitCode); exit $p.ExitCode";
+                string script = BuildInstallScript(installer,
+                    Path.Combine(directory, "SmallBusinessUpdater.exe"),
+                    Path.Combine(cache, "install-result.log"), Environment.ProcessId, reopenAfterUpdate);
                 cancellationToken.ThrowIfCancellationRequested();
                 var helper = Process.Start(new ProcessStartInfo
                 {
@@ -137,3 +153,4 @@ internal static class SelfUpdateService
         }
     }
 }
+

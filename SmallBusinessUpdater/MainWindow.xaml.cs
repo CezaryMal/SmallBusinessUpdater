@@ -294,7 +294,7 @@ public partial class MainWindow : Window, IComponentConnector
                     if (_busy && !downloadCancellation.IsCancellationRequested)
                         StageText.Text = message;
                 });
-                await SelfUpdateService.CheckAsync(progress, downloadCancellation.Token);
+                await SelfUpdateService.CheckAsync(progress, downloadCancellation.Token, reopenAfterUpdate: true);
                 if (downloadCancellation.IsCancellationRequested)
                     FeedbackDescription.Text += " Sprawdzanie aktualizacji Updatera anulowano.";
             }
@@ -448,7 +448,7 @@ public partial class MainWindow : Window, IComponentConnector
             {
                 if (_busy && !cancellation.IsCancellationRequested) StageText.Text = message;
             });
-            var result = await SelfUpdateService.CheckAsync(progress, cancellation.Token);
+            var result = await SelfUpdateService.CheckAsync(progress, cancellation.Token, reopenAfterUpdate: true);
             ShowFeedback(cancellation.IsCancellationRequested ? "Sprawdzanie anulowane" :
                 result.Success ? "Sprawdzanie Updatera zakończone" : "Nie udało się zaktualizować Updatera",
                 result.Message, cancellation.IsCancellationRequested ? "Info" : result.Success ? "Success" : "Warning");
@@ -462,5 +462,6 @@ public partial class MainWindow : Window, IComponentConnector
         }
     }
 }
+
 
 
