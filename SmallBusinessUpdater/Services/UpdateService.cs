@@ -18,6 +18,21 @@ public static class UpdateService
 	};
 
 	public static async Task<UpdateCheckResult> CheckAndDownloadAsync(AppConfig config, IProgress<string>? progress = null)
+    {
+        try
+        {
+            var result = await CheckAndDownloadCoreAsync(config, progress);
+            CheckHistoryService.Save(result.Message);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            CheckHistoryService.Save("Błąd sprawdzania: " + ex.Message);
+            throw;
+        }
+    }
+
+    private static async Task<UpdateCheckResult> CheckAndDownloadCoreAsync(AppConfig config, IProgress<string>? progress)
 	{
 		AppPaths.EnsureDirectories();
 		progress?.Report("Sprawdzanie aktualizacji...");
@@ -185,4 +200,5 @@ public static class UpdateService
 		}
 	}
 }
+
 

@@ -16,6 +16,7 @@ public class App : Application
 	{
 		base.OnStartup(e);
 		AppPaths.EnsureDirectories();
+		ThemeService.Apply(ConfigService.Load().DarkTheme);
 		string[] args = e.Args;
 		if (args.Contains("--startup", StringComparer.OrdinalIgnoreCase))
 		{
@@ -192,3 +193,4 @@ public class App : Application
 		new App().Run();
 	}
 }
+

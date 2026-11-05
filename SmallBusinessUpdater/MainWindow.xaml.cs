@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System;
 using System.Linq;
 using System.Windows;
@@ -17,6 +19,10 @@ public partial class MainWindow : Window, IComponentConnector
 		InitializeComponent();
 		_config = ConfigService.Load();
 		LoadConfigToGui();
+		RefreshSummary();
+		Activated += (_, _) => RefreshSummary();
+        if (string.IsNullOrWhiteSpace(_config.SymplexId) || string.IsNullOrWhiteSpace(_config.Nip))
+            SettingsTab.IsChecked = true;
 	}
 
 	private void LoadConfigToGui()
@@ -27,7 +33,8 @@ public partial class MainWindow : Window, IComponentConnector
 		ProgramPathTextBox.Text = (string.IsNullOrWhiteSpace(_config.SmallBusinessPath) ? "C:\\SB4\\ksiegaw.exe" : _config.SmallBusinessPath);
 		AutoStartCheckBox.IsChecked = AutoStartService.IsEnabled();
 		LaunchAfterUpdateCheckBox.IsChecked = _config.LaunchAfterUpdate;
-		SetStatus("Gotowy");
+		DarkThemeCheckBox.IsChecked = _config.DarkTheme;
+		SetStatus("Gotowy do sprawdzenia aktualizacji");
 	}
 
 	private bool SaveConfig()
@@ -63,6 +70,7 @@ public partial class MainWindow : Window, IComponentConnector
 			UpdateEndDate = UpdateEndDatePicker.SelectedDate.Value.Date,
 			SmallBusinessPath = text3,
 			AutoStart = valueOrDefault,
+			DarkTheme = DarkThemeCheckBox.IsChecked == true,
 			LaunchAfterUpdate = (LaunchAfterUpdateCheckBox.IsChecked == true)
 		};
 		try
@@ -95,7 +103,11 @@ public partial class MainWindow : Window, IComponentConnector
 
 	private void SaveButton_Click(object sender, RoutedEventArgs e)
 	{
-		SaveConfig();
+		if (SaveConfig())
+        {
+            RefreshSummary();
+            HomeTab.IsChecked = true;
+        }
 	}
 
 	private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -107,6 +119,7 @@ public partial class MainWindow : Window, IComponentConnector
 	{
 		if (!SaveConfig())
 		{
+            SettingsTab.IsChecked = true;
 			return;
 		}
 		using UpdateLockService updateLock = UpdateLockService.TryAcquire();
@@ -137,7 +150,7 @@ public partial class MainWindow : Window, IComponentConnector
 			}
 			if (!result.UpdateAvailable)
 			{
-				SetStatus($"Brak nowej aktualizacji. Build {result.BuildNumber} jest już zainstalowany.");
+				SetStatus("Small Business ma już tę wersję. Możesz korzystać z programu.");
 				if (_config.LaunchAfterUpdate) SmallBusinessService.Start(_config.SmallBusinessPath);
 				return;
 			}
@@ -155,7 +168,7 @@ public partial class MainWindow : Window, IComponentConnector
 				return;
 			}
 			VersionStateService.SaveInstalledBuild(result.BuildNumber, result.ProductVersion ?? "", result.InstallerHash ?? "");
-			SetStatus($"Zainstalowano build {result.BuildNumber}.");
+			SetStatus("Aktualizacja Small Business została zakończona.");
 		}
 		catch (Exception ex)
 		{
@@ -165,6 +178,7 @@ public partial class MainWindow : Window, IComponentConnector
 		finally
 		{
 			SetBusy(busy: false);
+			RefreshSummary();
 			await SelfUpdateService.CheckAsync();
 		}
 	}
@@ -186,6 +200,87 @@ public partial class MainWindow : Window, IComponentConnector
 		ProgramPathTextBox.IsEnabled = !busy;
 		AutoStartCheckBox.IsEnabled = !busy;
 		LaunchAfterUpdateCheckBox.IsEnabled = !busy;
+		DarkThemeCheckBox.IsEnabled = !busy;
 	}
+
+    private void RefreshSummary()
+    {
+        HomeGuidanceText.Text = string.IsNullOrWhiteSpace(_config.SymplexId)
+            ? "Zacznij od wpisania danych w zakładce Ustawienia."
+            : "Przed aktualizacją zapisz pracę i zamknij Small Business.";
+        LicenseSummaryText.Text = _config.UpdateEndDate == default
+            ? "Datę dostępu do aktualizacji ustawisz w Ustawieniach."
+            : DateTime.Today >= _config.UpdateEndDate.Date
+                ? $"Dostęp do aktualizacji wygasł {_config.UpdateEndDate:dd.MM.yyyy}. Sprawdź dane w Ustawieniach."
+                : $"Koniec dostępu do aktualizacji: {_config.UpdateEndDate:dd.MM.yyyy}";
+        var state = VersionStateService.Load();
+        var history = CheckHistoryService.Load();
+        HomeLastCheckText.Text = history.CheckedAt.HasValue
+            ? $"Ostatnie sprawdzenie: {history.CheckedAt.Value.ToLocalTime():dd.MM.yyyy, HH:mm}"
+            : "Nie sprawdzono jeszcze aktualizacji.";
+        InstalledBuildText.Text = state.InstalledBuild > 0
+            ? $"Small Business — zainstalowany build {state.InstalledBuild}"
+            : "Small Business — brak zapisanego buildu";
+        InstalledDateText.Text = state.InstalledAt.HasValue
+            ? $"Ostatnia instalacja: {state.InstalledAt:dd.MM.yyyy HH:mm}"
+            : "Ostatnia instalacja: brak danych";
+        LastCheckText.Text = history.CheckedAt.HasValue
+            ? $"Ostatnie sprawdzenie: {history.CheckedAt.Value.ToLocalTime():dd.MM.yyyy HH:mm}"
+            : "Ostatnie sprawdzenie: brak danych";
+        LastCheckResultText.Text = string.IsNullOrWhiteSpace(history.Result)
+            ? "Wynik sprawdzenia: brak danych"
+            : "Wynik sprawdzenia: " + history.Result;
+    }
+
+    private void DarkTheme_Click(object sender, RoutedEventArgs e)
+    {
+        bool dark = DarkThemeCheckBox.IsChecked == true;
+        try
+        {
+            var saved = ConfigService.Load();
+            saved.DarkTheme = dark;
+            ConfigService.Save(saved);
+            _config.DarkTheme = dark;
+            ThemeService.Apply(dark);
+        }
+        catch (Exception ex)
+        {
+            DarkThemeCheckBox.IsChecked = _config.DarkTheme;
+            MessageBox.Show("Nie udało się zapisać motywu. " + ex.Message, "Small Business Updater");
+        }
+    }
+
+    private void OpenLogs_Click(object sender, RoutedEventArgs e) => OpenDirectory(AppPaths.LogsDirectory);
+    private void OpenSbInstallers_Click(object sender, RoutedEventArgs e) => OpenDirectory(AppPaths.DownloadsDirectory);
+    private void OpenUpdaterInstallers_Click(object sender, RoutedEventArgs e) =>
+        OpenDirectory(Path.Combine(AppPaths.LocalDataDirectory, "SelfUpdate"));
+
+    private void OpenDirectory(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Nie udało się otworzyć folderu. " + ex.Message, "Small Business Updater");
+        }
+    }
+
+    private void Page_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized) return;
+        HomePage.Visibility = HomeTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPage.Visibility = SettingsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        DetailsPage.Visibility = DetailsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        CheckUpdatesButton.Visibility = HomeTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        SaveButton.Visibility = SettingsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
 }
+
+
+
+
+
 

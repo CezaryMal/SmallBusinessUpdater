@@ -12,7 +12,10 @@ public class AppConfig
 
 	public string SmallBusinessPath { get; set; } = "C:\\SB4\\ksiegaw.exe";
 
+	public bool DarkTheme { get; set; }
+
 	public bool AutoStart { get; set; }
 
 	public bool LaunchAfterUpdate { get; set; } = true;
 }
+
