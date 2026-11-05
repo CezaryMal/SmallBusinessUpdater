@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
 using SmallBusinessUpdater.Models;
 
@@ -17,13 +18,19 @@ public static class UpdateService
 		Timeout = TimeSpan.FromMinutes(5L)
 	};
 
-	public static async Task<UpdateCheckResult> CheckAndDownloadAsync(AppConfig config, IProgress<string>? progress = null)
+	public static async Task<UpdateCheckResult> CheckAndDownloadAsync(AppConfig config, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            var result = await CheckAndDownloadCoreAsync(config, progress);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await CheckAndDownloadCoreAsync(config, progress, cancellationToken);
             CheckHistoryService.Save(result.Message);
             return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            CheckHistoryService.Save("Sprawdzanie lub pobieranie anulowane przez użytkownika.");
+            throw;
         }
         catch (Exception ex)
         {
@@ -32,7 +39,7 @@ public static class UpdateService
         }
     }
 
-    private static async Task<UpdateCheckResult> CheckAndDownloadCoreAsync(AppConfig config, IProgress<string>? progress)
+    private static async Task<UpdateCheckResult> CheckAndDownloadCoreAsync(AppConfig config, IProgress<string>? progress, CancellationToken cancellationToken)
 	{
 		AppPaths.EnsureDirectories();
 		progress?.Report("Sprawdzanie aktualizacji...");
@@ -62,24 +69,26 @@ public static class UpdateService
 			{
 				progress?.Report("Pobieranie aktualizacji...");
 				string requestUri = $"{value}/user/get_program.php?nipu={Uri.EscapeDataString(nip)}&symboll={Uri.EscapeDataString(config.SymplexId)}";
-				using HttpResponseMessage response = await HttpClient.GetAsync(requestUri, HttpCompletionOption.ResponseHeadersRead);
-				if (!response.IsSuccessStatusCode)
+				var downloaded = await NetworkRetryService.RunAsync(async token =>
+                {
+                    using var response = await HttpClient.GetAsync(requestUri, HttpCompletionOption.ResponseHeadersRead, token);
+                    response.EnsureSuccessStatusCode();
+                    return (Bytes: await response.Content.ReadAsByteArrayAsync(token), FileName: GetFileNameFromResponse(response));
+                }, progress, cancellationToken);
+                byte[] bytes = downloaded.Bytes;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (bytes.Length < 1000000 || bytes.Length < 2 || bytes[0] != 77 || bytes[1] != 90)
 				{
 					continue;
 				}
-				byte[] bytes = await response.Content.ReadAsByteArrayAsync();
-				if (bytes.Length < 1000000 || bytes.Length < 2 || bytes[0] != 77 || bytes[1] != 90)
-				{
-					continue;
-				}
-				string fileName = GetFileNameFromResponse(response);
+				string fileName = downloaded.FileName;
 				if (string.IsNullOrWhiteSpace(fileName))
 				{
 					fileName = $"inst_sb_{DateTime.Now:yyyyMMdd_HHmmss}.exe";
 				}
 				fileName = Path.GetFileName(fileName);
-				destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
-				await File.WriteAllBytesAsync(destination, bytes);
+				destination = Path.Combine(AppPaths.DownloadsDirectory, ".download-" + Guid.NewGuid().ToString("N") + ".part");
+				await File.WriteAllBytesAsync(destination, bytes, cancellationToken);
 				progress?.Report("Weryfikowanie aktualizacji...");
 				if (!AuthenticodeHelper.IsSignatureValid(destination))
 				{
@@ -90,7 +99,7 @@ public static class UpdateService
 						Message = "Pobrany instalator ma nieprawidłowy podpis cyfrowy."
 					};
 				}
-				X509Certificate2 signerCertificate = AuthenticodeHelper.GetSignerCertificate(destination);
+				using X509Certificate2 signerCertificate = AuthenticodeHelper.GetSignerCertificate(destination);
 				if (signerCertificate == null)
 				{
 					DeleteFileSafe(destination);
@@ -124,7 +133,10 @@ public static class UpdateService
 						Message = "Nie udało się rozpoznać numeru buildu instalatora."
 					};
 				}
-				InstallerArchiveService.Clean(destination);
+				cancellationToken.ThrowIfCancellationRequested();
+                string verifiedPath = Path.Combine(AppPaths.DownloadsDirectory, fileName);
+                File.Move(destination, verifiedPath, true);
+                InstallerArchiveService.Clean(verifiedPath);
 				UpdateState updateState = VersionStateService.Load();
 				bool flag = updateState.InstalledBuild != buildNumber;
 				string message = ((!flag) ? $"Build {buildNumber} jest już zainstalowany." : $"Dostępna aktualizacja: build {buildNumber}.");
@@ -133,7 +145,7 @@ public static class UpdateService
 					Success = true,
 					UpdateAvailable = flag,
 					Message = message,
-					InstallerPath = destination,
+					InstallerPath = verifiedPath,
 					InstallerHash = installerHash,
 					ProductVersion = productVersion,
 					FileVersion = fileVersion,
@@ -142,9 +154,15 @@ public static class UpdateService
 					InstalledBuild = updateState.InstalledBuild
 				};
 			}
-			catch
-			{
-				if (!string.IsNullOrWhiteSpace(destination))
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                if (destination != null) DeleteFileSafe(destination);
+                throw;
+            }
+            
+            catch
+            {
+                if (!string.IsNullOrWhiteSpace(destination))
 				{
 					DeleteFileSafe(destination);
 				}
@@ -200,5 +218,8 @@ public static class UpdateService
 		}
 	}
 }
+
+
+
 
 
