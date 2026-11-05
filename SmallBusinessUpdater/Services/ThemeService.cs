@@ -30,6 +30,10 @@ internal static class ThemeService
         Set("InfoTextBrush", dark ? "#BFDBFE" : "#1E3A8A");
         Set("WarningBrush", dark ? "#431407" : "#FFF7ED");
         Set("WarningTextBrush", dark ? "#FED7AA" : "#9A3412");
+        Set("SuccessBrush", dark ? "#052E22" : "#ECFDF5");
+        Set("SuccessTextBrush", dark ? "#A7F3D0" : "#065F46");
+        Set("ErrorBrush", dark ? "#450A0A" : "#FEF2F2");
+        Set("ErrorTextBrush", dark ? "#FECACA" : "#991B1B");
 
         // Standard WPF editors and calendar popups also use system resource keys.
         resources[SystemColors.WindowBrushKey] = resources["InputBrush"];
@@ -41,3 +45,4 @@ internal static class ThemeService
             resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
     }
 }
+

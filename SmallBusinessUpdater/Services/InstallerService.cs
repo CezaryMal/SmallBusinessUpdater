@@ -46,7 +46,11 @@ public static class InstallerService
 			{
 				return Fail("Nie znaleziono pliku ksiegaw.exe.");
 			}
-			AppPaths.EnsureDirectories();
+            if (SmallBusinessService.IsRunning(smallBusinessPath))
+            {
+                return Fail("Small Business jest otwarty. Zapisz pracę, zamknij program i ponownie sprawdź aktualizacje.");
+            }
+            AppPaths.EnsureDirectories();
 			Log("");
 			Log("============================================");
 			Log("NOWA INSTALACJA");
@@ -537,3 +541,4 @@ public static class InstallerService
 	[DllImport("user32.dll")]
 	private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, nuint dwExtraInfo);
 }
+
