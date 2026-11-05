@@ -24,7 +24,7 @@ public partial class MainWindow : Window, IComponentConnector
     private CancellationTokenSource? _downloadCancellation;
 
     private sealed record EditorState(string Id, string Nip, string Date, string Program,
-        bool AutoStart, bool LaunchAfterUpdate);
+        bool AutoStart, bool LaunchAfterUpdate, bool AutoUpdateUpdater, string IntervalDays, bool Notifications);
 
     public MainWindow()
     {
@@ -48,6 +48,9 @@ public partial class MainWindow : Window, IComponentConnector
         AutoStartCheckBox.IsChecked = AutoStartService.IsEnabled();
         LaunchAfterUpdateCheckBox.IsChecked = _config.LaunchAfterUpdate;
         DarkThemeCheckBox.IsChecked = _config.DarkTheme;
+        AutoUpdateUpdaterCheckBox.IsChecked = _config.AutoUpdateUpdater;
+        CheckIntervalDaysTextBox.Text = Math.Clamp(_config.CheckIntervalDays, 1, 365).ToString();
+        NotificationsCheckBox.IsChecked = _config.ShowBackgroundNotifications;
         ShowFeedback("Gotowy do sprawdzenia", "Kliknij „Sprawdź aktualizacje”, gdy chcesz sprawdzić nową wersję.", "Info");
     }
 
@@ -57,7 +60,9 @@ public partial class MainWindow : Window, IComponentConnector
         UpdateEndDatePicker.Text,
         ProgramPathTextBox.Text.Trim(),
         AutoStartCheckBox.IsChecked == true,
-        LaunchAfterUpdateCheckBox.IsChecked == true);
+        LaunchAfterUpdateCheckBox.IsChecked == true,
+        AutoUpdateUpdaterCheckBox.IsChecked == true,
+        CheckIntervalDaysTextBox.Text.Trim(), NotificationsCheckBox.IsChecked == true);
 
     private bool SaveConfig()
     {
@@ -87,6 +92,9 @@ public partial class MainWindow : Window, IComponentConnector
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             Invalid(ProgramPathTextBox, PathErrorText, "Nie znaleziono programu. Użyj „Wybierz plik…” i wskaż ksiegaw.exe.");
 
+        bool intervalValid = int.TryParse(CheckIntervalDaysTextBox.Text.Trim(), out int intervalDays) && intervalDays >= 1 && intervalDays <= 365;
+        if (!intervalValid)
+            Invalid(CheckIntervalDaysTextBox, IntervalErrorText, "Wpisz liczbę dni od 1 do 365.");
         if (firstInvalid != null)
         {
             SettingsTab.IsChecked = true;
@@ -104,6 +112,9 @@ public partial class MainWindow : Window, IComponentConnector
             SmallBusinessPath = path,
             AutoStart = AutoStartCheckBox.IsChecked == true,
             DarkTheme = DarkThemeCheckBox.IsChecked == true,
+            AutoUpdateUpdater = AutoUpdateUpdaterCheckBox.IsChecked == true,
+            CheckIntervalDays = intervalDays,
+            ShowBackgroundNotifications = NotificationsCheckBox.IsChecked == true,
             LaunchAfterUpdate = LaunchAfterUpdateCheckBox.IsChecked == true
         };
         bool previousAutoStart = _savedEditorState.AutoStart;
@@ -122,6 +133,7 @@ public partial class MainWindow : Window, IComponentConnector
         }
         _config = next;
         NipTextBox.Text = nip;
+        CheckIntervalDaysTextBox.Text = intervalDays.ToString();
         _savedEditorState = ReadEditorState();
         ShowFeedback("Ustawienia zapisane", "Możesz przejść do sprawdzania aktualizacji.", "Success");
         return true;
@@ -129,9 +141,9 @@ public partial class MainWindow : Window, IComponentConnector
 
     private void ClearValidation()
     {
-        foreach (var message in new[] { IdErrorText, NipErrorText, DateErrorText, PathErrorText })
+        foreach (var message in new[] { IdErrorText, NipErrorText, DateErrorText, PathErrorText, IntervalErrorText })
             message.Visibility = Visibility.Collapsed;
-        foreach (var field in new Control[] { IdTextBox, NipTextBox, UpdateEndDatePicker, ProgramPathTextBox })
+        foreach (var field in new Control[] { IdTextBox, NipTextBox, UpdateEndDatePicker, ProgramPathTextBox, CheckIntervalDaysTextBox })
             field.ClearValue(Control.BorderBrushProperty);
     }
 
@@ -228,6 +240,7 @@ public partial class MainWindow : Window, IComponentConnector
             }
             if (!result.UpdateAvailable)
             {
+                CheckHistoryService.MarkCompleted();
                 bool opened = _config.LaunchAfterUpdate && SmallBusinessService.Start(_config.SmallBusinessPath);
                 ShowFeedback("Small Business jest aktualny",
                     _config.LaunchAfterUpdate
@@ -265,6 +278,7 @@ public partial class MainWindow : Window, IComponentConnector
                 return;
             }
             VersionStateService.SaveInstalledBuild(result.BuildNumber, result.ProductVersion ?? "", result.InstallerHash ?? "");
+            CheckHistoryService.MarkCompleted();
             ShowFeedback("Aktualizacja zakończona", "Nowa wersja Small Business została zainstalowana.", "Success");
         }
         catch (OperationCanceledException) when (downloadCancellation.IsCancellationRequested)
@@ -283,7 +297,7 @@ public partial class MainWindow : Window, IComponentConnector
             UpdateActionButtons();
             RefreshSummary();
             // Keep editors locked until a possible self-update has handed off installation.
-            if (!skipSelfUpdate)
+            if (!skipSelfUpdate && _config.AutoUpdateUpdater)
             {
                 _installingUpdater = true;
                 _downloadCancellation = downloadCancellation;
@@ -294,7 +308,7 @@ public partial class MainWindow : Window, IComponentConnector
                     if (_busy && !downloadCancellation.IsCancellationRequested)
                         StageText.Text = message;
                 });
-                await SelfUpdateService.CheckAsync(progress, downloadCancellation.Token, reopenAfterUpdate: true);
+                await SelfUpdateService.CheckAsync(progress, downloadCancellation.Token, reopenAfterUpdate: true, automatic: true);
                 if (downloadCancellation.IsCancellationRequested)
                     FeedbackDescription.Text += " Sprawdzanie aktualizacji Updatera anulowano.";
             }
@@ -325,7 +339,7 @@ public partial class MainWindow : Window, IComponentConnector
         ProgressBar.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         foreach (var field in new Control[] { CheckUpdatesButton, SaveButton, BrowseButton, IdTextBox,
             NipTextBox, UpdateEndDatePicker, ProgramPathTextBox, AutoStartCheckBox,
-            LaunchAfterUpdateCheckBox, DarkThemeCheckBox, CloseButton, SelfUpdateButton })
+            LaunchAfterUpdateCheckBox, DarkThemeCheckBox, CloseButton, SelfUpdateButton, OpenSmallBusinessButton, SettingsPage })
             field.IsEnabled = !busy;
         UpdateActionButtons();
     }
@@ -340,6 +354,9 @@ public partial class MainWindow : Window, IComponentConnector
             : DateTime.Today >= _config.UpdateEndDate.Date
                 ? $"Dostęp do aktualizacji wygasł {_config.UpdateEndDate:dd.MM.yyyy}. Sprawdź dane w Ustawieniach."
                 : $"Koniec dostępu do aktualizacji: {_config.UpdateEndDate:dd.MM.yyyy}";
+        int days = Math.Clamp(_config.CheckIntervalDays, 1, 365);
+        ScheduleSummaryText.Text = days == 1 ? "Sprawdzanie w tle: codziennie." :
+            days == 7 ? "Sprawdzanie w tle: co tydzień." : $"Sprawdzanie w tle: co {days} dni.";
         var state = VersionStateService.Load();
         var history = CheckHistoryService.Load();
         HomeLastCheckText.Text = history.CheckedAt.HasValue
@@ -461,7 +478,35 @@ public partial class MainWindow : Window, IComponentConnector
             SetBusy(false);
         }
     }
+
+    private void OpenSmallBusiness_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        string path = ProgramPathTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            SettingsTab.IsChecked = true;
+            ShowFeedback("Wskaż program Small Business", "W Ustawieniach wybierz plik ksiegaw.exe, a następnie spróbuj ponownie.", "Warning");
+            ProgramPathTextBox.BringIntoView();
+            ProgramPathTextBox.Focus();
+            return;
+        }
+        bool alreadyRunning = SmallBusinessService.IsRunning(path);
+        bool started = SmallBusinessService.Start(path);
+        ShowFeedback(started ? "Small Business jest gotowy" : "Nie udało się otworzyć Small Business",
+            started ? alreadyRunning ? "Program jest już uruchomiony. Przejdź do jego okna." : "Small Business został uruchomiony."
+                    : "Sprawdź ścieżkę programu w Ustawieniach i spróbuj ponownie.",
+            started ? "Success" : "Warning");
+    }
+
+    private void IntervalPreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string days)
+            CheckIntervalDaysTextBox.Text = days;
+    }
 }
+
+
 
 
 
