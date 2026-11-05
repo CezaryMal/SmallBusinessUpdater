@@ -41,8 +41,11 @@ internal static class SelfUpdateService
     }
 
     public static async Task<SelfUpdateResult> CheckAsync(IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default, bool reopenAfterUpdate = false)
+        CancellationToken cancellationToken = default, bool reopenAfterUpdate = false, bool automatic = false)
     {
+        var settings = ConfigService.Load();
+        if (automatic && !settings.AutoUpdateUpdater)
+            return new(true, "Automatyczna aktualizacja Updatera jest wyłączona.");
         if (checking) return new(false, "Sprawdzanie aktualizacji Updatera już trwa.");
         checking = true;
         string? partialPath = null;
@@ -115,6 +118,13 @@ internal static class SelfUpdateService
                     Path.Combine(directory, "SmallBusinessUpdater.exe"),
                     Path.Combine(cache, "install-result.log"), Environment.ProcessId, reopenAfterUpdate);
                 cancellationToken.ThrowIfCancellationRequested();
+                if (automatic)
+                {
+                    BackgroundNotificationService.Show(settings, "Aktualizacja Updatera",
+                        $"Pobrano wersję {normalized}. Updater zainstaluje ją teraz w tle.");
+                    await BackgroundNotificationService.FlushAsync();
+                }
+                cancellationToken.ThrowIfCancellationRequested();
                 var helper = Process.Start(new ProcessStartInfo
                 {
                     FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"),
@@ -139,6 +149,7 @@ internal static class SelfUpdateService
         catch (Exception ex)
         {
             LogService.Write("self-update.log", ex.ToString());
+            if (automatic) BackgroundNotificationService.Show(settings, "Aktualizacja Updatera wymaga uwagi", "Nie udało się zakończyć operacji. Możesz ponowić sprawdzanie w zakładce Szczegóły.", true);
             return new(false, "Nie udało się sprawdzić lub pobrać aktualizacji Updatera. Sprawdź połączenie i spróbuj ponownie. Szczegóły znajdziesz w logach.");
         }
         finally
@@ -153,4 +164,5 @@ internal static class SelfUpdateService
         }
     }
 }
+
 

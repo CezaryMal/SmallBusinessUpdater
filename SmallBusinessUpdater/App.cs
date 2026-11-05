@@ -180,7 +180,8 @@ public class App : Application
 
 	protected override void OnExit(ExitEventArgs e)
 	{
-		_guiInstance?.Dispose();
+		BackgroundNotificationService.Dispose();
+        _guiInstance?.Dispose();
 		_guiInstance = null;
 		base.OnExit(e);
 	}
@@ -193,4 +194,5 @@ public class App : Application
 		new App().Run();
 	}
 }
+
 

@@ -39,12 +39,20 @@ public static class StartupService
 			}
 			try
 			{
-				Log("Rozpoczynam sprawdzanie aktualizacji.");
+                if (!UpdateScheduleService.IsDue(config))
+                {
+                    Log("Pominięto sprawdzanie SB — nie upłynął ustawiony odstęp.");
+                    FinishChecking();
+                    if (config.LaunchAfterUpdate) StartSmallBusiness(config);
+                    return StartupRunResult.Completed;
+                }
+                Log("Rozpoczynam sprawdzanie aktualizacji.");
 				UpdateCheckResult result = await UpdateService.CheckAndDownloadAsync(config);
 				FinishChecking();
 				if (!result.Success)
 				{
 					Log("Błąd sprawdzania aktualizacji: " + result.Message);
+                    BackgroundNotificationService.Show(config, "Nie udało się sprawdzić Small Business", "Sprawdź połączenie i dane licencji. Możesz ponowić sprawdzanie w oknie Updatera.", true);
 					if (config.LaunchAfterUpdate)
 					{
 						StartSmallBusiness(config);
@@ -54,6 +62,7 @@ public static class StartupService
 				if (!result.UpdateAvailable)
 				{
 					Log($"Brak aktualizacji. Build {result.BuildNumber} jest już zainstalowany.");
+                    CheckHistoryService.MarkCompleted();
 					if (config.LaunchAfterUpdate)
 					{
 						StartSmallBusiness(config);
@@ -63,6 +72,7 @@ public static class StartupService
 				if (string.IsNullOrWhiteSpace(result.InstallerPath))
 				{
 					Log("UpdateService zwrócił aktualizację, ale bez ścieżki instalatora.");
+                    BackgroundNotificationService.Show(config, "Aktualizacja wymaga uwagi", "Nie znaleziono instalatora Small Business. Otwórz Updater i spróbuj ponownie.", true);
 					if (config.LaunchAfterUpdate)
 					{
 						StartSmallBusiness(config);
@@ -74,6 +84,7 @@ public static class StartupService
 				if (!installResult.Success)
 				{
 					Log("Instalacja nie powiodła się: " + installResult.Message);
+                    BackgroundNotificationService.Show(config, "Aktualizacja Small Business wymaga uwagi", installResult.Message, true);
 					if (config.LaunchAfterUpdate)
 					{
 						StartSmallBusiness(config);
@@ -82,6 +93,8 @@ public static class StartupService
 				}
 				VersionStateService.SaveInstalledBuild(result.BuildNumber, result.ProductVersion ?? "", result.InstallerHash ?? "");
 				Log($"Zainstalowano build {result.BuildNumber}.");
+                CheckHistoryService.MarkCompleted();
+                BackgroundNotificationService.Show(config, "Small Business został zaktualizowany", "Nowa wersja programu została pomyślnie zainstalowana.");
 				if (config.LaunchAfterUpdate)
 				{
 					StartSmallBusiness(config);
@@ -92,6 +105,7 @@ public static class StartupService
 			{
 				FinishChecking();
 				Log($"Nieobsłużony błąd --startup: {value}");
+                BackgroundNotificationService.Show(config, "Aktualizacja Small Business wymaga uwagi", "Operacja nie została zakończona. Otwórz Updater i sprawdź logi.", true);
 				if (config.LaunchAfterUpdate)
 				{
 					StartSmallBusiness(config);
@@ -100,7 +114,9 @@ public static class StartupService
 			}
 			finally
 			{
-				await SelfUpdateService.CheckAsync();
+				await BackgroundNotificationService.FlushAsync();
+            await SelfUpdateService.CheckAsync(automatic: true);
+            await BackgroundNotificationService.FlushAsync();
 			}
 		}
 		void FinishChecking()
@@ -167,4 +183,5 @@ public static class StartupService
 		LogService.Write("startup.log", message);
 	}
 }
+
 

@@ -7,6 +7,7 @@ namespace SmallBusinessUpdater.Services;
 public sealed class CheckHistory
 {
     public DateTimeOffset? CheckedAt { get; set; }
+    public DateTimeOffset? LastCompletedAt { get; set; }
     public string Result { get; set; } = "";
 }
 
@@ -31,15 +32,26 @@ internal static class CheckHistoryService
 
     public static void Save(string result)
     {
+        var history = Load();
+        history.CheckedAt = DateTimeOffset.Now;
+        history.Result = result;
+        Write(history);
+    }
+
+    public static void MarkCompleted()
+    {
+        var history = Load();
+        history.LastCompletedAt = DateTimeOffset.Now;
+        Write(history);
+    }
+
+    private static void Write(CheckHistory history)
+    {
         string temporary = HistoryPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             AppPaths.EnsureDirectories();
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new CheckHistory
-            {
-                CheckedAt = DateTimeOffset.Now,
-                Result = result
-            }));
+            File.WriteAllText(temporary, JsonSerializer.Serialize(history));
             File.Move(temporary, HistoryPath, true);
         }
         catch (Exception ex)

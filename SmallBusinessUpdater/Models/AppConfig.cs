@@ -14,8 +14,15 @@ public class AppConfig
 
 	public bool DarkTheme { get; set; }
 
-	public bool AutoStart { get; set; }
+	public bool AutoUpdateUpdater { get; set; } = true;
+
+    public int CheckIntervalDays { get; set; } = 1;
+
+    public bool ShowBackgroundNotifications { get; set; } = true;
+
+    public bool AutoStart { get; set; }
 
 	public bool LaunchAfterUpdate { get; set; } = true;
 }
+
 
